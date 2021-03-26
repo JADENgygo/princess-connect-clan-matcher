@@ -1,0 +1,46 @@
+{
+  "name": "princess_connect_clan_searcher",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "build:release": "npm run copy && webpack --mode=production",
+    "build:debug": "npm run copy && webpack --mode=development",
+    "watch": "npm run copy && webpack --mode=development --watch",
+    "start": "npm run copy && webpack serve --mode=development",
+    "copy": "rm -rf dist && mkdir dist && cp -R public/* dist"
+  },
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JADENgygo/princess-connect-clan-searcher.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/JADENgygo/princess-connect-clan-searcher/issues"
+  },
+  "homepage": "https://github.com/JADENgygo/princess-connect-clan-searcher#readme",
+  "dependencies": {
+    "uikit": "^3.5.9",
+    "vue": "^2.6.12",
+    "vue-class-component": "^7.2.6",
+    "vue-router": "^3.5.1"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.12.3",
+    "@babel/preset-env": "^7.12.1",
+    "@types/uikit": "^3.3.1",
+    "babel-loader": "^8.2.1",
+    "css-loader": "^5.0.1",
+    "file-loader": "^6.2.0",
+    "style-loader": "^2.0.0",
+    "ts-loader": "^8.0.18",
+    "typescript": "^4.2.3",
+    "url-loader": "^4.1.1",
+    "vue-loader": "^15.9.5",
+    "vue-template-compiler": "^2.6.12",
+    "webpack": "^5.5.1",
+    "webpack-cli": "^4.2.0",
+    "webpack-dev-server": "^3.11.0"
+  }
+}
