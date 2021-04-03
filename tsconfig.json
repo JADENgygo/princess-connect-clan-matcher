@@ -9,6 +9,11 @@
 			"dom",
 			"es2020"
 		],
-		"experimentalDecorators": true
+		"experimentalDecorators": true,
+		"paths": {
+			"./uikit-icons": [
+				"./src/uikit-icons"
+			]
+		}
 	}
 }
