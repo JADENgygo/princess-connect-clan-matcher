@@ -1,6 +1,6 @@
 <template>
 	<div class="uk-container uk-margin-small-top uk-margin-bottom">
-		<div class="uk-text-muted uk-text-left"><a class="uk-link-muted" href="https://twitter.com/JADENgygo">サイト作成者: @JADEN</a></div>
+		<div class="uk-text-muted uk-text-left"><a class="uk-link-muted" href="https://twitter.com/JADENgygo">サイト作成者: @JADENgygo</a></div>
 		<breadcrumb class="uk-margin-small-top" v-bind:routeName="$route.name + ($route.params.userId ? '/' + $route.params.userId : '')" v-bind:title="$route.meta.title"></breadcrumb>
 		<div class="uk-margin-small-top"><a href="#menu" uk-toggle v-on:click="updateMenu()">メニュー</a></div>
 		<div id="menu" uk-offcanvas="overlay: true; flip: true">
