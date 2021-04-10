@@ -1,5 +1,5 @@
 {
-  "name": "princess_connect_clan_searcher",
+  "name": "princess_connect_clan_matcher",
   "version": "1.0.0",
   "description": "",
   "scripts": {
@@ -12,14 +12,14 @@
   "private": true,
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/JADENgygo/princess-connect-clan-searcher.git"
+    "url": "git+https://github.com/JADENgygo/princess-connect-clan-matcher.git"
   },
   "author": "",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/JADENgygo/princess-connect-clan-searcher/issues"
+    "url": "https://github.com/JADENgygo/princess-connect-clan-matcher/issues"
   },
-  "homepage": "https://github.com/JADENgygo/princess-connect-clan-searcher#readme",
+  "homepage": "https://github.com/JADENgygo/princess-connect-clan-matcher#readme",
   "dependencies": {
     "dayjs": "^1.10.4",
     "firebase": "^8.3.1",

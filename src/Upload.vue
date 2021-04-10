@@ -1,38 +1,33 @@
 <template>
 	<div class="uk-margin-top">
-		<div v-if="!processed">
+		<div v-if="processed" class="uk-text-center">
+			<div uk-spinner></div>
+			<div class="uk-margin-small-top uk-text-bold">{{ processedMessage }}</div>
+		</div>
+		<div v-else>
 			<div class="uk-form-stacked uk-margin-top">
 				<label class="uk-form-label" for="clan-name">クラン名</label>
 				<div class="uk-form-controls">
-					<input type="text" id="clan-name" class="uk-input uk-form-small uk-form-width-large" v-bind:class="{'uk-form-danger': nameRequired}" v-model="name" v-bind:placeholder="inputRequiredMessage">
+					<input type="text" id="clan-name" class="uk-input uk-form-small uk-form-width-medium" v-bind:class="{'uk-form-danger': nameRequired}" v-model="name" v-bind:placeholder="inputRequiredMessage">
 				</div>
-				<div class="uk-form-label uk-margin-top">タグ</div>
-				<div class="uk-form-controls">
-					<div uk-grid class="uk-grid-small">
-						<div>
-							<select class="uk-select uk-form-small uk-form-width-small" v-model="rankTag">
-								<option v-for="e in allTags.rank" v-bind:key="e">{{ e }}</option>
-							</select>
+				<ul uk-accordion>
+					<li>
+						<a class="uk-accordion-title uk-text-small">タグ</a>
+						<div class="uk-accordion-content">
+							<div uk-grid class="uk-grid-small uk-form-controls">
+								<div v-for="e in allTags" v-bind:key="e.label">
+									<div class="uk-form-label uk-text-center">{{ e.name }}</div>
+									<input type="checkbox" class="uk-checkbox" v-model="enabledTags" v-bind:value="e.label">
+									<select class="uk-select uk-form-small uk-form-width-small" v-model="tag[e.label]" v-bind:disabled="!enabledTags.includes(e.label)">
+										<option v-for="tag in e.values" v-bind:key="tag">{{ tag }}</option>
+									</select>
+								</div>
+							</div>
 						</div>
-						<div>
-							<select class="uk-select uk-form-small uk-form-width-small" v-model="playTag">
-								<option v-for="e in allTags.play" v-bind:key="e">{{ e }}</option>
-							</select>
-						</div>
-						<div>
-							<select class="uk-select uk-form-small uk-form-width-small" v-model="loginTag">
-								<option v-for="e in allTags.login" v-bind:key="e">{{ e }}</option>
-							</select>
-						</div>
-						<div>
-							<select class="uk-select uk-form-small uk-form-width-small" v-model="silenceTag">
-								<option v-for="e in allTags.silence" v-bind:key="e">{{ e }}</option>
-							</select>
-						</div>
-					</div>
-				</div>
+					</li>
+				</ul>
 				<div class="uk-form-label uk-margin-top">プロフィール画像</div>
-				<div uk-grid class="uk-margin-top uk-grid-small uk-text-center uk-child-width-1-2 uk-child-width-1-3@s uk-child-width-1-4@m uk-child-width-1-4@l">
+				<div uk-grid class="uk-grid-small uk-text-center uk-child-width-1-2 uk-child-width-1-3@s uk-child-width-1-4@m uk-child-width-1-4@l">
 					<div v-for="(e, i) in images" v-bind:key="e.url">
 						<div class="uk-form-label">{{ (i + 1) + '枚目' }}</div>
 						<div class="uk-form-controls">
@@ -49,10 +44,11 @@
 				<div class="uk-form-controls">
 					<textarea class="uk-textarea" id="description" rows="5" v-model="description"></textarea>
 				</div>
-				<label class="uk-margin-top uk-form-label" for="screen-name">Twitterアカウント名</label>
+				<label class="uk-margin-top uk-form-label" for="screen-name">連絡先Twitterアカウント名</label>
 				<div class="uk-form-controls">
-					@ <input type="text" id="screen-name" class="uk-input uk-form-small uk-form-width-small" v-bind:class="{'uk-form-danger': screenNameRequired}" v-bind:placeholder="inputRequiredMessage" v-model="screenName">
+					@ <input type="text" id="screen-name" class="uk-input uk-form-small uk-form-width-small" v-model="screenName">
 				</div>
+				<div class="uk-margin-top"><label><input type="checkbox" class="uk-checkbox" v-model="closed"> 非公開にする</label></div>
 			</div>
 			<div uk-grid class="uk-grid-small uk-child-width-1-2 uk-margin-top">
 				<div class="uk-text-left">
@@ -65,7 +61,7 @@
 							<div>クラン登録を削除しますか</div>
 							<div uk-grid class="uk-margin-top uk-grid-small uk-child-width-1-2">
 								<div class="uk-text-left">
-									<button class="uk-button uk-button-default uk-button-small uk-modal-close" type="button">キャンセル</button>
+									<button class="uk-button uk-button-default uk-button-small uk-modal-close" type="button">閉じる</button>
 								</div>
 								<div class="uk-text-right">
 									<button class="uk-button uk-button-danger uk-button-small uk-modal-close" type="button" v-on:click="deleteClan()">削除</button>
@@ -75,11 +71,7 @@
 					</div>
 				</div>
 			</div>
-			<div class="uk-margin-top uk-text-danger">{{ validationMessage }}</div>
-		</div>
-		<div v-else class="uk-text-center">
-			<div uk-spinner></div>
-			<div class="uk-margin-small-top">{{ processedMessage }}</div>
+			<div class="uk-margin-top uk-text-danger" v-if="validationMessage !== ''">{{ validationMessage }}</div>
 		</div>
 	</div>
 </template>
@@ -90,47 +82,47 @@ import firebase from 'firebase/app';
 import UIkit from 'uikit';
 import dayjs from 'dayjs';
 import {v4 as uuid} from 'uuid';
-import {getTags} from './utility';
+import {getTags, Tags} from './utility';
 
 @Component
 export default class Upload extends Vue {
-	auth: any = firebase.auth();
-	db = firebase.firestore();
-	storage = firebase.storage();
-	name: string = '';
-	rankTag: string = '';
-	playTag: string = '';
-	loginTag: string = '';
-	silenceTag: string = '';
-	allTags: {[key: string]: string[]} = {};
-	images: {src: string, data: any}[] = [...Array(4)].map(() => {
+	private auth: any = firebase.auth();
+	private db = firebase.firestore();
+	private storage = firebase.storage();
+	private name: string = '';
+	private tag: {[key: string]: string} = {};
+	private enabledTags: string[] = [];
+	private allTags: Tags = [];
+	private images: {src: string, data: any}[] = [...Array(4)].map(() => {
 		return {src: '', data: null}
 	});
-	description: string = '';
-	screenName: string = '';
-	processed: boolean = false;
-	nameRequired: boolean = false;
-	screenNameRequired: boolean = false;
-	inputRequiredMessage: string = '';
-	validationMessage: string = '';
-	type: 'edit' | 'add' = 'edit';
-	uploadButtonText: string = '登録';
-	processedMessage: string = 'アップロード中です';
+	private description: string = '';
+	private screenName: string = '';
+	private closed: boolean = false;
+	private processed: boolean = true;
+	private nameRequired: boolean = false;
+	private screenNameRequired: boolean = false;
+	private inputRequiredMessage: string = '';
+	private validationMessage: string = '';
+	private type: 'edit' | 'add' = 'edit';
+	private uploadButtonText: string = '登録';
+	private processedMessage: string = 'ロード中です';
 
 	async created(): Promise<void> {
-		this.allTags = {
-			rank:  getTags('rank'),
-			play: getTags('play'),
-			login: getTags('login'),
-			silence: getTags('silence'),
-		};
-		this.rankTag = this.allTags.rank[0];
-		this.playTag = this.allTags.play[0];
-		this.loginTag = this.allTags.login[0];
-		this.silenceTag = this.allTags.silence[0];
-
 		if (this.$router.currentRoute.name === 'register') {
 			this.type = 'add';
+		}
+
+		this.allTags = getTags();
+		for (let e of this.allTags) {
+			this.tag[e.label] = e.values[0];
+			if (this.type === 'add') {
+				this.enabledTags.push(e.label);
+			}
+		}
+
+		if (this.type === 'add') {
+			this.processed = false;
 			return;
 		}
 
@@ -140,15 +132,17 @@ export default class Upload extends Vue {
 		const d = await this.db.collection('clans').doc(userId).get();
 		const doc: any = d.data();
 		this.name = doc.name;
-		this.rankTag = doc.tags[0];
-		this.playTag = doc.tags[1];
-		this.loginTag = doc.tags[2];
-		this.silenceTag = doc.tags[3];
+		for (let key in doc.tag) {
+			this.tag[key] = doc.tag[key];
+			this.enabledTags.push(key);
+		}
 		this.description = doc.description;
 		this.screenName = doc.screenName;
+		this.closed = doc.closed;
 		for (let i = 0; i < 4; ++i) {
 			this.$set(this.images[i], 'src', doc.downloadUrls[i] ?? '');
 		}
+		this.processed = false;
 	}
 
 	removeImage(index: number): void {
@@ -177,8 +171,8 @@ export default class Upload extends Vue {
 
 		if (!validated) {
 			UIkit.notification({
-				message: '対応していないファイル形式です',
-				status: 'warning',
+				message: 'JPEG画像のみ選択可能です',
+				status: 'danger',
 				pos: 'top-center',
 				timeout: 5000
 			});
@@ -205,16 +199,11 @@ export default class Upload extends Vue {
 			this.validationMessage = '入力欄に不備があります';
 			error = true;
 		}
-		if (this.screenName === '') {
-			this.screenNameRequired = true;
-			this.inputRequiredMessage = '入力は必須です';
-			this.validationMessage = '入力欄に不備があります';
-			error = true;
-		}
 		if (error) {
 			return;
 		}
 		this.processed = true;
+		this.processedMessage = 'アップロード中です';
 		if (this.type === 'add') {
 			this.addClan();
 		}
@@ -238,12 +227,20 @@ export default class Upload extends Vue {
 		}
 
 		const now = dayjs().format('YYYY-MM-DDTHH:mm:ss.SSS[+09:00]') + ' ' + uuid();
+		const tag_ = Object.assign({}, this.tag);
+		for (let key in tag_) {
+			if (!this.enabledTags.includes(key)) {
+				delete tag_[key];
+			}
+		}
 		const doc = {
+			userId: userId,
 			name: this.name,
 			description: this.description,
-			tags: [this.rankTag, this.playTag, this.loginTag, this.silenceTag],
+			tag: tag_,
 			downloadUrls: downloadUrls,
 			screenName: this.screenName,
+			closed: this.closed,
 			created_at: now,
 			updated_at: now,
 		};
@@ -275,13 +272,19 @@ export default class Upload extends Vue {
 			}
 		}
 
+		const tag_ = Object.assign({}, this.tag);
+		for (let key in tag_) {
+			if (!this.enabledTags.includes(key)) {
+				delete tag_[key];
+			}
+		}
 		const doc_ = {
 			name: this.name,
 			description: this.description,
-			tags: [this.rankTag, this.playTag, this.loginTag, this.silenceTag],
+			tag: tag_,
 			screenName: this.screenName,
+			closed: this.closed,
 			downloadUrls: downloadUrls,
-			created_at: doc.created_at,
 			updated_at: dayjs().format('YYYY-MM-DDTHH:mm:ss.SSS[+09:00]') + ' ' + uuid(),
 		};
 		await this.db.collection('clans').doc(userId).update(doc_);
@@ -294,10 +297,10 @@ export default class Upload extends Vue {
 		this.processedMessage = '削除処理中です';
 		const userId: string = this.auth.currentUser.uid;
 		const doc: any = await this.db.collection('clans').doc(userId).get();
-		const imagesExisted = doc.data().images;
+		const downloadUrls = doc.data().downloadUrls;
 		const ref: any = this.storage.ref();
 		for (let i = 0; i < 4; ++i) {
-			if (imagesExisted[i]) {
+			if (downloadUrls[i] !== null) {
 				const imageRef = ref.child(`${userId}/profile${i}.jpg`);
 				await imageRef.delete();
 			}

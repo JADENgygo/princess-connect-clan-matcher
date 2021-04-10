@@ -1,75 +1,81 @@
 <template>
-	<div class="uk-margin-top">
-		<search-form v-model="condition" v-bind:allTags="allTags" v-on:search="search($event)"></search-form>
+	<div>
+		<search-form class="uk-margin-top" v-model="condition" v-bind:allTags="allTags" v-bind:grid="true" v-on:search="preProcessSearch($event)"></search-form>
 		<div v-if="!ready" class="uk-margin-top uk-text-center">
 			<div uk-spinner></div>
-			<div class="uk-margin-small-top">検索中です</div>
+			<div class="uk-margin-small-top uk-text-bold">検索中です</div>
 		</div>
 		<div v-else-if="userIds.length === 0" class="uk-margin-top uk-text-center uk-text-bold">
 			検索結果がありません
 		</div>
 		<div v-else uk-grid class="uk-margin-top uk-grid-small uk-child-width-1-1">
 			<div v-for="(e, i) in userIds" v-bind:key="e">
-				<router-link v-bind:to="`/profile/${e}`" @click.native="saveSearchResult()">
-					<div class="uk-card uk-card-default uk-card-small uk-card-hover uk-card-body">
-						<div uk-grid class="uk-grid-small uk-child-width-1-1 uk-child-width-1-2@s uk-child-width-1-2@m uk-child-width-1-2@l">
-							<div class="uk-flex uk-flex-middle uk-flex-center" uk-lightbox>
-								<a v-bind:href="imagePaths[i]">
-									<img v-bind:src="imagePaths[i]" v-bind:style="`max-height: ${imageMaxHeight}px`">
-								</a>
-							</div>
-							<div>
-								<div class="uk-text-bold">{{ names[i] }}</div>
-								<div class="uk-margin-small-top">
-									<div uk-grid class="uk-grid-collapse">
-										<div v-for="e in clanTags[i]" v-bind:key="e">
-											<label class="uk-label">{{ e }}</label>
-										</div>
-									</div>
+				<div class="uk-card uk-card-default uk-card-small uk-card-hover uk-card-body">
+					<div uk-grid class="uk-grid-small uk-child-width-1-1 uk-child-width-1-2@s">
+						<div class="uk-flex uk-flex-middle uk-flex-center" uk-lightbox>
+							<a v-bind:href="imagePaths[i]">
+								<img v-bind:src="imagePaths[i]" v-bind:style="`max-height: ${imageMaxHeight}px`">
+							</a>
+						</div>
+						<div v-on:click="goToProfile(e)" class="link-wo-line">
+							<span class="uk-text-bold link">{{ names[i] }}</span>
+							<span v-if="bookmarkable">
+								<a uk-icon="bookmark" class="uk-margin-small-left bookmark" v-if="bookmarks.includes(e)" v-on:click="removeBookmark($event, e)"></a>
+								<a uk-icon="bookmark" class="uk-margin-small-left" v-else v-on:click="addBookmark($event, e)"></a>
+							</span>
+							<div uk-grid class="uk-grid-collapse uk-margin-small-top">
+								<div v-for="e in clanTags[i]" v-bind:key="e">
+									<label class="link-label uk-label" v-on:click="searchByTag($event, e)">{{ e }}</label>
 								</div>
-								<div class="uk-margin-small-top">{{ descriptions[i] }}</div>
 							</div>
+							<div class="uk-margin-small-top">{{ descriptions[i] }}</div>
 						</div>
 					</div>
-				</router-link>
+				</div>
 			</div>
 		</div>
-		<div class="uk-text-right uk-margin-large-right"><span v-on:click="showSearchDialog()" class="float-button" uk-icon="icon: search; ratio: 2"></span></div>
-		<div id="search-dialog" class="uk-flex-top uk-modal-container" uk-modal>
-			<div class="uk-modal-dialog uk-modal-body uk-margin-auto-vertical">
-				<button class="uk-modal-close-default" type="button" uk-close></button>
-				<search-form v-model="condition" v-bind:allTags="allTags" v-on:search="search($event)"></search-form>
+		<div>
+			<div class="uk-text-right uk-margin-large-right">
+				<a href="#search-offcanvas" uk-toggle>
+					<span class="float-button" uk-icon="icon: search; ratio: 2"></span>
+				</a>
+			</div>
+			<div id="search-offcanvas" uk-offcanvas="overlay: true">
+				<div class="uk-offcanvas-bar uk-text-center">
+					<search-form v-model="condition" v-bind:allTags="allTags" v-bind:grid="false" v-on:search="searchByFloatButton($event)"></search-form>
+				</div>
 			</div>
 		</div>
 	</div>
 </template>
 <script lang="ts">
 import Vue from 'vue';
+import {Route, RawLocation} from 'vue-router';
 import Component from 'vue-class-component';
 import UIkit from 'uikit';
 import SearchForm from './SearchForm';
-import {getTags} from './utility';
+import * as utility from './utility';
 import firebase from 'firebase/app';
 
 @Component({
 	components: {
 		SearchForm
-	}
+	},
 })
 export default class Search extends Vue {
 	private db = firebase.firestore();
-	private storage = firebase.storage();
-	private allTags: {[key: string]: string[]} = {};
-	private loaded: boolean = false;
+	private auth: any = firebase.auth();
+	private allTags: utility.Tags = [];
 	private ready: boolean = false;
 	private readonly imageMaxHeight: number = 200;
+	private timeoutId: number = 0;
+	private firstSearched: boolean = false;
+	private bookmarks: string[] = [];
+	private bookmarkable: boolean = false;
 
 	private condition: {[key: string]: any} = {
 		keyword: '',
-		rankTag: '',
-		playTag: '',
-		loginTag: '',
-		silenceTag: '',
+		tag: {},
 	};
 	private conditionCache: {[key: string]: any} = {};
 	private names: string[] = [];
@@ -77,52 +83,86 @@ export default class Search extends Vue {
 	private userIds: string[] = [];
 	private clanTags: string[][] = [];
 	private descriptions: string[] = [];
+	private closed: boolean[] = [];
 	private startCreatedAt: any = null;
 
 	async created(): Promise<void> {
-		window.addEventListener('scroll', this.load);
-		this.allTags = {
-			rank: [''].concat(getTags('rank')),
-			play: [''].concat(getTags('play')),
-			login: [''].concat(getTags('login')),
-			silence: [''].concat(getTags('silence')),
+		this.allTags = utility.getTags().map(e => {
+			e.values = [''].concat(e.values);
+			return e;
+		});
+		for (let e of this.allTags) {
+			this.$set(this.condition.tag, e.label, {name: e.name, value: ''});
+		}
+		this.timeoutId = setTimeout(this.load, 100);
+
+		const showBookmarks = async () => {
+			if (this.$store.state.authentication === 'login') {
+				this.bookmarkable = true;
+				const user = this.auth.currentUser;
+				const doc: any = await this.db.collection('bookmarks').doc(user.uid).get();
+				if (doc.exists) {
+					this.bookmarks = doc.data().userIds;
+				}
+			}
 		};
 
 		const searchResult = this.$store.state.searchResult;
 		if (searchResult !== null) {
-			this.condition = Object.assign({}, searchResult.conditionCache);
-			this.conditionCache = Object.assign({}, searchResult.conditionCache);
+			this.condition = Object.assign({}, JSON.parse(JSON.stringify(searchResult.conditionCache)));
+			this.conditionCache = Object.assign({}, JSON.parse(JSON.stringify(searchResult.conditionCache)));
 			this.names = searchResult.names;
 			this.imagePaths = searchResult.imagePaths;
 			this.userIds = searchResult.userIds;
 			this.clanTags = searchResult.clanTags;
 			this.descriptions = searchResult.descriptions;
+			this.closed = searchResult.closed;
 			this.startCreatedAt = searchResult.startCreatedAt;
 			this.ready = true;
+			this.firstSearched = true;
+			await showBookmarks();
 			return;
 		}
 
-		await this.search(false);
-		this.ready = true;
+		await showBookmarks();
+		await this.preProcessSearch(false);
 	}
 
 	destroyed(): void {
-		window.removeEventListener('scroll', this.load);
+		clearTimeout(this.timeoutId);
 	}
 
 	async load(): Promise<void> {
-		if (!this.loaded && document.documentElement.scrollHeight <= Math.ceil(document.documentElement.clientHeight + document.documentElement.scrollTop)) {
-			this.loaded = true;
-			await this.search(true);
-			this.loaded = false;
+		if (!this.firstSearched) {
+			// do nothing
 		}
+		else if (document.documentElement.scrollHeight <= Math.ceil(document.documentElement.clientHeight + document.documentElement.scrollTop)) {
+			await this.preProcessSearch(true);
+		}
+		this.timeoutId = setTimeout(this.load, 100);
 	}
 
-	async search(offset: boolean): Promise<void> {
-		if (!offset) {
-			this.ready = false;
-			this.conditionCache = Object.assign({}, this.condition);
+	searchByFloatButton(offset: boolean): void {
+		UIkit.offcanvas('#search-offcanvas').hide();
+		window.scrollTo(0, 0);
+		this.preProcessSearch(offset);
+	}
+
+	searchByTag(event: any, searchTag: string): void {
+		event.stopPropagation();
+		for (let e of this.allTags) {
+			this.condition.tag[e.label].value = '';
+			for (let tag of e.values) {
+				if (searchTag === tag) {
+					this.condition.tag[e.label].value = tag;
+					break;
+				}
+			}
 		}
+		this.preProcessSearch(false);
+	}
+
+	async preProcessSearch(offset: boolean): Promise<void> {
 		if (offset && this.startCreatedAt === null) {
 			return;
 		}
@@ -133,11 +173,21 @@ export default class Search extends Vue {
 			this.descriptions = [];
 			this.userIds = [];
 			this.imagePaths = [];
+			this.closed = [];
 			this.startCreatedAt = null;
+			this.ready = false;
+			this.firstSearched = false;
+			this.conditionCache = Object.assign({}, JSON.parse(JSON.stringify(this.condition)));
 		}
 
+		await this.searchClans(offset);
+		this.ready = true;
+		this.firstSearched = true;
+	}
+
+	async searchClans(offset: boolean): Promise<void> {
 		let querySnapshot;
-		const limit = 5;
+		const limit = 10;
 		if (offset) {
 			querySnapshot = await this.db.collection('clans').orderBy('updated_at', 'desc').startAfter(this.startCreatedAt).limit(limit).get();
 		}
@@ -156,12 +206,14 @@ export default class Search extends Vue {
 			clanTags: [],
 			descriptions: [],
 			imagePaths: [],
+			closed: [],
 		};
 		querySnapshot.forEach((d: any) => {
 			const doc: any = d.data();
 			buf.userIds.push(d.id);
 			buf.names.push(doc.name);
-			buf.clanTags.push(doc.tags);
+			const tags = Object.entries(doc.tag).sort(utility.compareTags).map(e => e[1]);
+			buf.clanTags.push(tags);
 			let description = doc.description;
 			if (100 < description.length) {
 				description = description.substr(0, 99) + '…';
@@ -172,16 +224,21 @@ export default class Search extends Vue {
 				downloadUrl = './img/no_image.jpg';
 			}
 			buf.imagePaths.push(downloadUrl);
+			buf.closed.push(doc.closed);
 		});
 
-		const searchTags = offset ? [this.conditionCache.rankTag, this.conditionCache.playTag, this.conditionCache.loginTag, this.conditionCache.silenceTag].filter(e => e !== '') :
-			[this.condition.rankTag, this.condition.playTag, this.condition.loginTag, this.condition.silenceTag].filter(e => e !== '');
+		const condition = offset ? this.conditionCache : this.condition;
+		let searchTags = [];
+		for (let label in condition.tag) {
+			searchTags.push(condition.tag[label].value);
+		}
+		searchTags = searchTags.filter(e => e !== '');
 		const clansFiltered = [...Array(querySnapshot.docs.length)].map(() => true);
 		for (let clanIndex = 0; clanIndex < clansFiltered.length; ++clanIndex) {
 			for (let searchTagIndex = 0; searchTagIndex < searchTags.length; ++searchTagIndex) {
 				let found = false;
-				for (let i = 0; i < buf.clanTags[clanIndex].length; ++i) {
-					if (buf.clanTags[clanIndex][i] === searchTags[searchTagIndex]) {
+				for (let key in buf.clanTags[clanIndex]) {
+					if (buf.clanTags[clanIndex][key] === searchTags[searchTagIndex]) {
 						found = true;
 					}
 				}
@@ -204,6 +261,15 @@ export default class Search extends Vue {
 			}
 		}
 
+		for (let i = 0; i < querySnapshot.docs.length; ++i) {
+			if (!clansFiltered[i]) {
+				continue;
+			}
+			if (buf.closed[i]) {
+				clansFiltered[i] = false;
+			}
+		}
+
 		this.userIds = this.userIds.concat(buf.userIds.filter((e: string, i: number) => clansFiltered[i]));
 		this.names = this.names.concat(buf.names.filter((e: string, i: number) => clansFiltered[i]));
 		this.imagePaths = this.imagePaths.concat(buf.imagePaths.filter((e: string, i: number) => clansFiltered[i]));
@@ -211,20 +277,31 @@ export default class Search extends Vue {
 		this.descriptions = this.descriptions.concat(buf.descriptions.filter((e: string, i: number) => clansFiltered[i]));
 
 		const added = clansFiltered.some(e => e);
-		const enough = document.documentElement.scrollHeight !== document.documentElement.clientHeight;
-		if (!added || !enough) {
-			await this.search(true);
+		if (!added) {
+			await this.searchClans(true);
 		}
-		this.ready = true;
 	}
 
-	showSearchDialog(): void {
-		UIkit.modal('#search-dialog').show();
+	async addBookmark(event: any, userId: string): Promise<void> {
+		event.stopPropagation();
+		await utility.addBookmark(userId);
+		this.bookmarks.push(userId);
+	}
+
+	async removeBookmark(event: any, userId: string): Promise<void> {
+		event.stopPropagation();
+		await utility.removeBookmark(userId);
+		this.bookmarks = this.bookmarks.filter((e: string) => e !== userId);
+	}
+
+	goToProfile(userId: string): void {
+		this.saveSearchResult();
+		this.$router.push(`/profile/${userId}`);
 	}
 
 	saveSearchResult(): void {
 		const value = {
-			conditionCache: Object.assign({}, this.conditionCache),
+			conditionCache: JSON.parse(JSON.stringify(this.conditionCache)),
 			names: this.names,
 			imagePaths: this.imagePaths,
 			userIds: this.userIds,
@@ -233,7 +310,7 @@ export default class Search extends Vue {
 			startCreatedAt: this.startCreatedAt,
 			scrollTop: document.documentElement.scrollTop,
 		};
-		this.$store.commit('pushSearchResult', value);
+		this.$store.commit('setSearchResult', value);
 	}
 }
 </script>
@@ -241,5 +318,29 @@ export default class Search extends Vue {
 .float-button {
 	position: fixed;
 	bottom: 10px;
+}
+
+.bookmark >>> svg {
+	color: #1E87F0;
+}
+
+.bookmark >>> polygon {
+	fill: #1E87F0;
+}
+
+.link:hover {
+	cursor: pointer;
+	text-decoration: underline;
+	text-decoration-color: #0F6ECD;
+}
+
+.link-wo-line:hover {
+	cursor: pointer;
+}
+
+.link-label:hover {
+	cursor: pointer;
+	text-decoration: underline;
+	text-decoration-color: white;
 }
 </style>

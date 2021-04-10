@@ -13,15 +13,9 @@ import firebase from 'firebase/app';
 export default class Login extends Vue {
 	loginIconPath: string = './img/twitter_icon.svg';
 
-	login(): void {
+	async login(): Promise<void> {
 		const provider = new firebase.auth.TwitterAuthProvider();
-		firebase.auth().signInWithRedirect(provider).catch(error => {
-			const errorCode = error.code;
-			const errorMessage = error.message;
-			const credential = error.credential;
-			console.error('login error');
-			console.error(errorCode, errorMessage, credential);
-		});
+		await firebase.auth().signInWithRedirect(provider);
 	}
 }
 </script>
